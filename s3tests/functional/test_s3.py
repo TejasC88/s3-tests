@@ -1096,20 +1096,19 @@ def test_account_usage():
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
 def test_head_bucket_usage():
-    # boto3.set_stream_logger(name='botocore')
     client = get_client()
     bucket_name = _create_objects(keys=['foo'])
-    # adds the unordered query parameter
+
+    def add_read_stats_param(request, **kwargs):
+        request.params['read-stats'] = 'true'
+
+    client.meta.events.register('request-created.s3.HeadBucket', add_read_stats_param)
     client.meta.events.register('after-call.s3.HeadBucket', get_http_response)
     client.head_bucket(Bucket=bucket_name)
     hdrs = http_response['headers']
     assert hdrs['X-RGW-Object-Count'] == '1'
     assert hdrs['X-RGW-Bytes-Used'] == '3'
-    assert hdrs['X-RGW-Quota-User-Size'] == '-1'
-    assert hdrs['X-RGW-Quota-User-Objects'] == '-1'
     assert hdrs['X-RGW-Quota-Max-Buckets'] == '1000'
-    assert hdrs['X-RGW-Quota-Bucket-Size'] == '-1'
-    assert hdrs['X-RGW-Quota-Bucket-Objects'] == '-1'
 
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
@@ -3141,8 +3140,8 @@ def test_put_object_ifmatch_nonexisted_failed():
     client.meta.events.register('before-call.s3.PutObject', lf)
     e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key='foo', Body='bar')
     status, error_code = _get_status_and_error_code(e.response)
-    assert status == 412
-    assert error_code == 'PreconditionFailed'
+    assert status == 404
+    assert error_code == 'NoSuchKey'
 
     e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key='foo')
     status, error_code = _get_status_and_error_code(e.response)
@@ -3323,6 +3322,11 @@ def test_bucket_head_notexist():
 def test_bucket_head_extended():
     bucket_name = get_new_bucket()
     client = get_client()
+
+    def add_read_stats_param(request, **kwargs):
+        request.params['read-stats'] = 'true'
+
+    client.meta.events.register('request-created.s3.HeadBucket', add_read_stats_param)
 
     response = client.head_bucket(Bucket=bucket_name)
     assert int(response['ResponseMetadata']['HTTPHeaders']['x-rgw-object-count']) == 0

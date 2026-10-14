@@ -296,11 +296,9 @@ def test_assume_role_creds_expiry():
 		region_name='',
 		)
     bucket_name = get_new_bucket_name()
-    try:
-        s3bucket = s3_client.create_bucket(Bucket=bucket_name)
-    except ClientError as e:
-        s3bucket_error = e.response.get("Error", {}).get("Code")
-    assert s3bucket_error == 'AccessDenied'
+    with pytest.raises(ClientError) as exc:
+        s3_client.create_bucket(Bucket=bucket_name)
+    assert exc.value.response['Error']['Code'] == 'ExpiredToken'
 
 @pytest.mark.test_of_sts
 @pytest.mark.fails_on_dbstore
